@@ -1,623 +1,118 @@
-// will set to true when video can be copied to texture
-var copyVideo = false;
 
-function setupVideo(url) {
-  const video = document.createElement('video');
+var sbox = new Array(8);
+sbox[0] = [
+    [14,4,13,1,2,15,11,8,3,10,6,12,5,9,0,7],
+    [0,15,7,4,14,2,13,1,10,6,12,11,9,5,3,8],
+    [4,1,14,8,13,6,2,11,15,12,9,7,3,10,5,0],
+    [15,12,8,2,4,9,1,7,5,11,3,14,10,0,6,13]
+]
+sbox[1] = [
+    [15,1,8,14,6,11,3,4,9,7,2,13,12,0,5,10],
+    [3,13,4,7,15,2,8,14,12,0,1,10,6,9,11,5],
+    [0,14,7,11,10,4,13,1,5,8,12,6,9,3,2,15],
+    [13,8,10,1,3,15,4,2,11,6,7,12,0,5,14,9]
+]
+sbox[2] = [
+    [10,0,9,14,6,3,15,5,1,13,12,7,11,4,2,8],
+    [13,7,0,9,3,4,6,10,2,8,5,14,13,11,15,1],
+    [13,6,4,9,8,15,3,0,11,1,2,12,5,10,14,7],
+    [1,10,13,0,6,9,8,7,4,15,14,3,11,5,2,12]
+]
+sbox[3] = [
+    [7,13,14,3,0,6,9,10,1,2,8,5,11,12,4,15],
+    [13,8,11,5,6,15,0,3,4,7,2,12,1,10,14,9],
+    [10,6,9,0,12,11,7,13,15,1,3,14,5,2,8,4],
+    [3,15,0,6,10,1,13,8,9,4,5,11,12,7,2,14]
+]
+sbox[4] = [
+    [2,12,4,1,7,10,11,6,8,5,3,15,13,0,14,9],
+    [14,11,2,12,4,7,13,1,5,0,15,10,3,9,8,6],
+    [4,2,1,11,10,13,7,8,15,9,12,5,6,3,0,14],
+    [11,8,12,7,1,14,2,13,6,15,0,9,10,4,5,3]
+]
+sbox[5] = [
+    [12,1,10,15,9,2,6,8,0,13,3,4,14,7,5,11],
+    [10,15,4,2,7,12,9,5,6,1,13,14,0,11,3,8],
+    [9,14,15,5,2,8,12,3,7,0,4,10,1,13,11,6],
+    [4,3,2,12,9,5,15,10,11,14,1,7,6,0,8,13]
+]
+sbox[6] = [
+    [4,11,2,14,15,0,8,13,3,12,9,7,5,10,6,1],
+    [13,0,11,7,4,9,1,10,14,3,5,12,2,15,8,6],
+    [1,4,11,13,12,3,7,14,10,15,6,8,0,5,9,2],
+    [6,11,12,8,1,4,10,7,9,5,0,15,14,2,3,12]
+]
+sbox[7] = [
+    [13,2,8,4,6,15,11,1,10,9,3,14,5,0,12,7],
+    [1,15,13,8,10,3,7,4,12,5,6,11,0,14,9,2],
+    [7,11,4,1,9,12,14,2,0,6,10,13,15,3,5,8],
+    [2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11]
+]
 
-  var playing = false;
-  var timeupdate = false;
-
-  video.autoplay = true;
-  video.muted = true;
-  video.loop = true;
-
-  // Waiting for these 2 events ensures
-  // there is data in the video
-
-  video.addEventListener('playing', function() {
-     playing = true;
-     checkReady();
-  }, true);
-
-  video.addEventListener('timeupdate', function() {
-     timeupdate = true;
-     checkReady();
-  }, true);
-
-  video.src = url;
-  video.play();
-
-  function checkReady() {
-    if (playing && timeupdate) {
-      copyVideo = true;
+function maincount(){
+    var content = document.getElementById("input").value;
+    if(content.length!=8){
+        return;
     }
-  }
-
-  return video;
-}
-
-var squareRotation = 0.0;
-//
-// start here
-//
-function main() {
-  const canvas = document.getElementById("main_canvas");
-  // Initialize the GL context
-  const gl = canvas.getContext("webgl");
-
-  // Only continue if WebGL is available and working
-  if (!gl) {
-    alert("Unable to initialize WebGL. Your browser or machine may not support it.");
-    return;
-  }
-
-  // Set clear color to black, fully opaque
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
-  // Clear the color buffer with specified clear color
-  gl.clear(gl.COLOR_BUFFER_BIT);
-
-  //shader program
-  const vsSource = `
-    attribute vec4 aVertexPosition;
-    attribute vec3 aVertexNormal;
-    attribute vec2 aTextureCoord;
-
-    uniform mat4 uNormalMatrix;
-    uniform mat4 uModelViewMatrix;
-    uniform mat4 uProjectionMatrix;
-
-    varying highp vec2 vTextureCoord;
-    varying highp vec3 vLighting;
-
-    void main(void) {
-      gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-      vTextureCoord = aTextureCoord;
-
-      // Apply lighting effect
-
-      highp vec3 ambientLight = vec3(0.3, 0, 0);
-      highp vec3 directionalLightColor = vec3(0.5, 0.9, 0.9);
-      highp vec3 directionalVector = normalize(vec3(0.85, 0.8, 0.75));
-
-      highp vec4 transformedNormal = uNormalMatrix * vec4(aVertexNormal, 1.0);
-
-      highp float directional = max(dot(transformedNormal.xyz, directionalVector), 0.0);
-      vLighting = ambientLight + (directionalLightColor * directional);
+    var reg = /^[0-9]*$/;
+    if(!reg.test(content)){
+        return;
     }
-  `;
-  const fsSource = `
-    varying highp vec2 vTextureCoord;
-    varying highp vec3 vLighting;
-
-    uniform sampler2D uSampler;
-
-    void main(void) {
-      highp vec4 texelColor = texture2D(uSampler, vTextureCoord);
-
-      gl_FragColor = vec4(texelColor.rgb * vLighting, texelColor.a);
+    //经过过滤，现在都是8位纯数字
+    document.getElementById("proc0").innerHTML="输入学号："+content;
+    content="0000"+content;
+    code="";
+    for(var i=0; i<12; i++){
+        switch(parseInt(content.charAt(i))){
+        case 0:
+            code+=("0000"); break;
+        case 1:
+            code+=("0001"); break;
+        case 2:
+            code+=("0010"); break;
+        case 3:
+            code+=("0011"); break;
+        case 4:
+            code+=("0100"); break;
+        case 5:
+            code+=("0101"); break;
+        case 6:
+            code+=("0110"); break;
+        case 7:
+            code+=("0111"); break;
+        case 8:
+            code+=("1000"); break;
+        case 9:
+            code+=("1001"); break;
+        }
     }
-  `;
-  //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  //gl.enable(gl.BLEND);
-  gl.enable(gl.CULL_FACE);
-  gl.cullFace(gl.BACK);
-  //gl.enable(gl.DEPTH_TEST);
-  const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
-  const programInfo = {
-    program: shaderProgram,
-    attribLocations: {
-      vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
-      vertexNormal: gl.getAttribLocation(shaderProgram, 'aVertexNormal'),
-      textureCoord: gl.getAttribLocation(shaderProgram, 'aTextureCoord'),
-    },
-    uniformLocations: {
-      projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
-      modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
-      normalMatrix: gl.getUniformLocation(shaderProgram, 'uNormalMatrix'),
-      uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
-    },
-  };
-  bfrs = initBuffers(gl);
-  const video = setupVideo('Firefox.mp4');
-  const texture = initTexture(gl, 'Firefox.mp4');
-  var then = 0;
-  // Draw the scene repeatedly
-  function render(now) {
-    now *= 0.001;  // convert to seconds
-    const deltaTime = now - then;
-    then = now;
-
-    if (copyVideo) {
-      updateTexture(gl, texture, video);
+    document.getElementById("proc1").innerHTML="补零："+content;
+    document.getElementById("proc2").innerHTML="二进制码："+code;
+    document.getElementById("proc3").innerHTML="分割：";
+    for(var i=0; i<8; i++){
+        var sbs = code.substring(i*6, i*6+6);
+        document.getElementById("proc3").innerHTML+=sbs+" ";
     }
-
-    drawScene(gl, programInfo, bfrs, texture, deltaTime);
-
-    requestAnimationFrame(render);
-  }
-  requestAnimationFrame(render);
-}
-
-
-function initShaderProgram(gl, vsSource, fsSource) {
-  const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
-  const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
-
-  // Create the shader program
-
-  const shaderProgram = gl.createProgram();
-  gl.attachShader(shaderProgram, vertexShader);
-  gl.attachShader(shaderProgram, fragmentShader);
-  gl.linkProgram(shaderProgram);
-
-  // If creating the shader program failed, alert
-
-  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-    alert('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
-    return null;
-  }
-
-  return shaderProgram;
-  
-  //
-  // creates a shader of the given type, uploads the source and
-  // compiles it.
-  //
-  function loadShader(gl, type, source) {
-    const shader = gl.createShader(type);
-
-    // Send the source to the shader object
-
-    gl.shaderSource(shader, source);
-
-    // Compile the shader program
-
-    gl.compileShader(shader);
-
-    // See if it compiled successfully
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
+    //过S盒子
+    var soutput0xs = new Int8Array(8);
+    for(var i=0; i<8; i++){
+        var sinput = code.substring(i*6, i*6+6);
+        var row = 2*parseInt(sinput.charAt(0))+parseInt(sinput.charAt(5));
+        var col = 8*parseInt(sinput.charAt(1))+4*parseInt(sinput.charAt(2))+2*parseInt(sinput.charAt(3))+parseInt(sinput.charAt(4));
+        row = parseInt(row); col = parseInt(col);
+        soutput0xs[i]=sbox[i][row][col];
     }
-
-    return shader;
-  }
-}
-
-function initBuffers(gl) {
-
-  // Create a buffer for the square's positions.
-
-  const positionBuffer = gl.createBuffer();
-
-  // Select the positionBuffer as the one to apply buffer
-  // operations to from here out.
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-
-  // Now create an array of positions for the square.
-
-  const positions = [
-    // Front face
-    -1.0, -1.0,  1.0,
-     1.0, -1.0,  1.0,
-     1.0,  1.0,  1.0,
-    -1.0,  1.0,  1.0,
-    
-    // Back face
-    -1.0, -1.0, -1.0,
-    -1.0,  1.0, -1.0,
-     1.0,  1.0, -1.0,
-     1.0, -1.0, -1.0,
-    
-    // Top face
-    -1.0,  1.0, -1.0,
-    -1.0,  1.0,  1.0,
-     1.0,  1.0,  1.0,
-     1.0,  1.0, -1.0,
-    
-    // Bottom face
-    -1.0, -1.0, -1.0,
-     1.0, -1.0, -1.0,
-     1.0, -1.0,  1.0,
-    -1.0, -1.0,  1.0,
-    
-    // Right face
-     1.0, -1.0, -1.0,
-     1.0,  1.0, -1.0,
-     1.0,  1.0,  1.0,
-     1.0, -1.0,  1.0,
-    
-    // Left face
-    -1.0, -1.0, -1.0,
-    -1.0, -1.0,  1.0,
-    -1.0,  1.0,  1.0,
-    -1.0,  1.0, -1.0,
-  ];
-
-  // Now pass the list of positions into WebGL to build the
-  // shape. We do this by creating a Float32Array from the
-  // JavaScript array, then use it to fill the current buffer.
-
-  gl.bufferData(gl.ARRAY_BUFFER,
-                new Float32Array(positions),
-                gl.STATIC_DRAW);
-  
-  
-  //----------------------------------------------------------------------------
-  const textureCoordBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, textureCoordBuffer);
-
-  const textureCoordinates = [
-    // Front
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-    // Back
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-    // Top
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-    // Bottom
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-    // Right
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-    // Left
-    0.0,  0.0,
-    1.0,  0.0,
-    1.0,  1.0,
-    0.0,  1.0,
-  ];
-
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordinates),
-                gl.STATIC_DRAW);
-  //------------------------------------------------------------------------------
-  const normalBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-
-  const vertexNormals = [
-    // Front
-    0.0,  0.0,  1.0,
-    0.0,  0.0,  1.0,
-    0.0,  0.0,  1.0,
-    0.0,  0.0,  1.0,
-
-    // Back
-    0.0,  0.0, -1.0,
-    0.0,  0.0, -1.0,
-    0.0,  0.0, -1.0,
-    0.0,  0.0, -1.0,
-
-    // Top
-    0.0,  1.0,  0.0,
-    0.0,  1.0,  0.0,
-    0.0,  1.0,  0.0,
-    0.0,  1.0,  0.0,
-
-    // Bottom
-    0.0, -1.0,  0.0,
-    0.0, -1.0,  0.0,
-    0.0, -1.0,  0.0,
-    0.0, -1.0,  0.0,
-
-    // Right
-    1.0,  0.0,  0.0,
-    1.0,  0.0,  0.0,
-    1.0,  0.0,  0.0,
-    1.0,  0.0,  0.0,
-
-    // Left
-    -1.0,  0.0,  0.0,
-    -1.0,  0.0,  0.0,
-    -1.0,  0.0,  0.0,
-    -1.0,  0.0,  0.0
-  ];
-
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexNormals),
-                gl.STATIC_DRAW);
-  //-----------------------------------------------------------------------------
-  const indexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-
-  // This array defines each face as two triangles, using the
-  // indices into the vertex array to specify each triangle's
-  // position.
-
-  const indices = [
-    0,  1,  2,      0,  2,  3,    // front
-    4,  5,  6,      4,  6,  7,    // back
-    8,  9,  10,     8,  10, 11,   // top
-    12, 13, 14,     12, 14, 15,   // bottom
-    16, 17, 18,     16, 18, 19,   // right
-    20, 21, 22,     20, 22, 23,   // left
-  ];
-  // Now send the element array to GL
-
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(indices), gl.STATIC_DRAW);
-  return {
-    position: positionBuffer,
-    normal: normalBuffer,
-    textureCoord: textureCoordBuffer,
-    indices: indexBuffer,
-  };
-}
-function drawScene(gl, programInfo, buffers, texture, deltaTime) {
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
-  gl.clearDepth(1.0);                 // Clear everything
-  gl.enable(gl.DEPTH_TEST);           // Enable depth testing
-  gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
-
-  // Clear the canvas before we start drawing on it.
-
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  // Create a perspective matrix, a special matrix that is
-  // used to simulate the distortion of perspective in a camera.
-  // Our field of view is 45 degrees, with a width/height
-  // ratio that matches the display size of the canvas
-  // and we only want to see objects between 0.1 units
-  // and 100 units away from the camera.
-
-  const fieldOfView = 45 * Math.PI / 180;   // in radians
-  const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-  //const zNear = 0.1;
-  //const zFar = 100.0;
-  const zNear = 0.01;
-  const zFar = 100;
-  const projectionMatrix = mat4.create();
-
-  // note: glmatrix.js always has the first argument
-  // as the destination to receive the result.
-  mat4.perspective(projectionMatrix,
-                   fieldOfView,
-                   aspect,
-                   zNear,
-                   zFar);
-
-  // Set the drawing position to the "identity" point, which is
-  // the center of the scene.
-  modelViewMatrix = mat4.create();
-
-  // Now move the drawing position a bit to where we want to
-  // start drawing the square.
-
-  mat4.translate(modelViewMatrix,     // destination matrix
-    modelViewMatrix,     // matrix to translate
-    [-0.0, 0.0, -15]);  // amount to translate
-  squareRotation += deltaTime;
-  mat4.rotate(modelViewMatrix,  // destination matrix
-    modelViewMatrix,  // matrix to rotate
-    squareRotation,   // amount to rotate in radians
-    [1, -3, 1]);       // axis to rotate around
-  mat4.translate(modelViewMatrix,     // destination matrix
-    modelViewMatrix,     // matrix to translate
-    [-3,-1,0]);  // amount to translate
-  const normalMatrix = mat4.create();
-  mat4.inverse(normalMatrix, modelViewMatrix);
-  mat4.transpose(normalMatrix, normalMatrix);
-
-  // Tell WebGL how to pull out the positions from the position
-  // buffer into the vertexPosition attribute.
-  {
-    const numComponents = 3;  // pull out 3 values per iteration
-    const type = gl.FLOAT;    // the data in the buffer is 32bit floats
-    const normalize = false;  // don't normalize
-    const stride = 0;         // how many bytes to get from one set of values to the next
-                              // 0 = use type and numComponents above
-    const offset = 0;         // how many bytes inside the buffer to start from
-    gl.vertexAttribPointer(
-        programInfo.attribLocations.vertexPosition,
-        numComponents,
-        type,
-        normalize,
-        stride,
-        offset);
-    gl.enableVertexAttribArray(
-        programInfo.attribLocations.vertexPosition);
-  }
-  // Tell WebGL how to pull out the normals from
-  // the normal buffer into the vertexNormal attribute.
-  {
-    const numComponents = 3;
-    const type = gl.FLOAT;
-    const normalize = false;
-    const stride = 0;
-    const offset = 0;
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normal);
-    gl.vertexAttribPointer(
-        programInfo.attribLocations.vertexNormal,
-        numComponents,
-        type,
-        normalize,
-        stride,
-        offset);
-    gl.enableVertexAttribArray(
-        programInfo.attribLocations.vertexNormal);
-  }
-  {
-    const num = 2; // every coordinate composed of 2 values
-    const type = gl.FLOAT; // the data in the buffer is 32 bit float
-    const normalize = false; // don't normalize
-    const stride = 0; // how many bytes to get from one set to the next
-    const offset = 0; // how many butes inside the buffer to start from
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffers.textureCoord);
-    gl.vertexAttribPointer(programInfo.attribLocations.textureCoord, num, type, normalize, stride, offset);
-    gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
-  }
-  // Tell WebGL to use our program when drawing
-
-  gl.useProgram(programInfo.program);
-
-  // Set the shader uniforms
-
-  gl.uniformMatrix4fv(
-      programInfo.uniformLocations.projectionMatrix,
-      false,
-      projectionMatrix);
-  gl.uniformMatrix4fv(
-      programInfo.uniformLocations.modelViewMatrix,
-      false,
-      modelViewMatrix);
-  gl.uniformMatrix4fv(
-    programInfo.uniformLocations.normalMatrix,
-    false,
-    normalMatrix);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indices);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
-  // Tell WebGL we want to affect texture unit 0
-  gl.activeTexture(gl.TEXTURE0);
-
-  // Bind the texture to texture unit 0
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  // Tell the shader we bound the texture to texture unit 0
-  gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
-  {
-    const vertexCount = 36;
-    const type = gl.UNSIGNED_SHORT;
-    const offset = 0;
-    gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
-  }
-//------------------------------------------------------------------
-  modelViewMatrix = mat4.create();
-
-  mat4.translate(modelViewMatrix,     // destination matrix
-    modelViewMatrix,     // matrix to translate
-    [0,0,-15]);  // amount to translate
-  mat4.rotate(modelViewMatrix,  // destination matrix
-    modelViewMatrix,  // matrix to rotate
-    squareRotation,   // amount to rotate in radians
-    [0, 1, 0]);       // axis to rotate around
-  mat4.rotate(modelViewMatrix,  // destination matrix
-    modelViewMatrix,  // matrix to rotate
-    0.7,   // amount to rotate in radians
-    [0, 0, 1]);       // axis to rotate around
-  mat4.translate(modelViewMatrix,     // destination matrix
-    modelViewMatrix,     // matrix to translate
-    [-2,-2,0]);  // amount to translate
-  gl.uniformMatrix4fv(
-    programInfo.uniformLocations.projectionMatrix,
-    false,
-    projectionMatrix);
-  gl.uniformMatrix4fv(
-    programInfo.uniformLocations.modelViewMatrix,
-    false,
-    modelViewMatrix);
-  gl.uniformMatrix4fv(
-    programInfo.uniformLocations.normalMatrix,
-    false,
-    normalMatrix);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.indices);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
-  {
-    const vertexCount = 24;
-    const type = gl.UNSIGNED_SHORT;
-    const offset = 12*2;
-    gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
-  }/**/
-
-}
-function initTexture(gl, url) {
-  const texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  // Because video has to be download over the internet
-  // they might take a moment until it's ready so
-  // put a single pixel in the texture so we can
-  // use it immediately.
-  const level = 0;
-  const internalFormat = gl.RGBA;
-  const width = 1;
-  const height = 1;
-  const border = 0;
-  const srcFormat = gl.RGBA;
-  const srcType = gl.UNSIGNED_BYTE;
-  const pixel = new Uint8Array([0, 0, 255, 255]);  // opaque blue
-  gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
-                width, height, border, srcFormat, srcType,
-                pixel);
-
-  // Turn off mips and set  wrapping to clamp to edge so it
-  // will work regardless of the dimensions of the video.
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-
-  return texture;
-}
-function updateTexture(gl, texture, video) {
-  const level = 0;
-  const internalFormat = gl.RGBA;
-  const srcFormat = gl.RGBA;
-  const srcType = gl.UNSIGNED_BYTE;
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
-                srcFormat, srcType, video);
-}
-function loadTexture(gl, url) {
-  const texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  // Because images have to be download over the internet
-  // they might take a moment until they are ready.
-  // Until then put a single pixel in the texture so we can
-  // use it immediately. When the image has finished downloading
-  // we'll update the texture with the contents of the image.
-  const level = 0;
-  const internalFormat = gl.RGBA;
-  const width = 1;
-  const height = 1;
-  const border = 0;
-  const srcFormat = gl.RGBA;
-  const srcType = gl.UNSIGNED_BYTE;
-  const pixel = new Uint8Array([0, 0, 255, 255]);  // opaque blue
-  gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
-                width, height, border, srcFormat, srcType,
-                pixel);
-
-  const image = new Image();
-  image.onload = function() {
-
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
-                  srcFormat, srcType, image);
-
-    // WebGL1 has different requirements for power of 2 images
-    // vs non power of 2 images so check if the image is a
-    // power of 2 in both dimensions.
-    if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
-       // Yes, it's a power of 2. Generate mips.
-       gl.generateMipmap(gl.TEXTURE_2D);
-    } else {
-       // No, it's not a power of 2. Turn of mips and set
-       // wrapping to clamp to edge
-       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    document.getElementById("proc4").innerHTML="通过S盒：";
+    for(var i=0; i<8; i++){
+        document.getElementById("proc4").innerHTML+=soutput0xs[i]+" ";
     }
-  };
-  image.src = url;
-
-  return texture;
+    //算出答案
+    document.getElementById("proc5").innerHTML="结果：";
+    var transtable = ["0000","0001","0010","0011","0100","0101","0110","0111","1000","1001","1010","1011","1100","1101","1110","1111"];
+    for(var i=0; i<8; i++){
+        
+        document.getElementById("proc5").innerHTML+=transtable[soutput0xs[i]]+" ";
+    }
 }
 
-function isPowerOf2(value) {
-  return (value & (value - 1)) == 0;
-}
-
-main();
+window.document.getElementById("input").addEventListener("input", maincount);
