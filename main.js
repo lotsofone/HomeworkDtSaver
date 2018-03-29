@@ -49,14 +49,23 @@ sbox[7] = [
     [2,1,14,7,4,10,8,13,15,12,9,0,3,5,6,11]
 ]
 
+function cleanas(){
+    document.getElementById("proc0").innerHTML = "请输入8位学号";
+    document.getElementById("proc1").innerHTML = "";
+    document.getElementById("proc2").innerHTML = "";
+    document.getElementById("proc3").innerHTML = "";
+    document.getElementById("proc4").innerHTML = "";
+    document.getElementById("proc5").innerHTML = "";
+}
+
 function maincount(){
     var content = document.getElementById("input").value;
     if(content.length!=8){
-        return;
+        cleanas(); return;
     }
     var reg = /^[0-9]*$/;
     if(!reg.test(content)){
-        return;
+        cleanas(); return;
     }
     //经过过滤，现在都是8位纯数字
     document.getElementById("proc0").innerHTML="输入学号："+content;
